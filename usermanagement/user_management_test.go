@@ -1,11 +1,39 @@
 package usermanagement
 
 import (
+	"errors"
 	"testing"
 )
 
+type MockUserRepository struct {
+	users map[string]User
+}
+
+func (r *MockUserRepository) Create(user User) error {
+	// Check if the username already exists
+	_, ok := r.users[user.Username]
+	if ok {
+		return errors.New("username already exists")
+	}
+
+	r.users[user.Username] = user
+	return nil
+}
+
+func (r *MockUserRepository) FindByUsername(username string) (User, error) {
+	user, ok := r.users[username]
+	if !ok {
+		return User{}, errors.New("user not found")
+	}
+
+	return user, nil
+}
+
 func TestCreateUser(t *testing.T) {
-	um := NewUserManager()
+	repo := &MockUserRepository{
+		users: make(map[string]User),
+	}
+	uc := NewUserUseCase(repo)
 
 	// Test case 1: Creating a new user with valid data
 	userData := UserData{
@@ -14,7 +42,7 @@ func TestCreateUser(t *testing.T) {
 		Password: "password123",
 	}
 
-	createdUser, err := um.CreateUser(userData)
+	createdUser, err := uc.CreateUser(userData)
 	if err != nil {
 		t.Errorf("Failed to create user: %v", err)
 	}
@@ -30,7 +58,7 @@ func TestCreateUser(t *testing.T) {
 		Password: "newpassword",
 	}
 
-	_, err = um.CreateUser(duplicateUserData)
+	_, err = uc.CreateUser(duplicateUserData)
 	if err == nil {
 		t.Error("Expected an error when creating a user with an existing username")
 	}
@@ -42,14 +70,17 @@ func TestCreateUser(t *testing.T) {
 		Password: "password123",
 	}
 
-	_, err = um.CreateUser(invalidEmailData)
+	_, err = uc.CreateUser(invalidEmailData)
 	if err != nil {
 		t.Error("Expected an error when creating a user with an invalid email")
 	}
 }
 
 func TestAuthenticateUser(t *testing.T) {
-	um := NewUserManager()
+	repo := &MockUserRepository{
+		users: make(map[string]User),
+	}
+	uc := NewUserUseCase(repo)
 
 	// Create a test user
 	userData := UserData{
@@ -58,10 +89,10 @@ func TestAuthenticateUser(t *testing.T) {
 		Password: "password123",
 	}
 
-	um.CreateUser(userData)
+	uc.CreateUser(userData)
 
 	// Test case 1: Authenticating a user with valid credentials
-	authenticatedUser, err := um.AuthenticateUser(userData.Username, userData.Password)
+	authenticatedUser, err := uc.AuthenticateUser(userData.Username, userData.Password)
 	if err != nil {
 		t.Errorf("Failed to authenticate user: %v", err)
 	}
@@ -71,13 +102,13 @@ func TestAuthenticateUser(t *testing.T) {
 	}
 
 	// Test case 2: Authenticating a user with an incorrect password
-	_, err = um.AuthenticateUser(userData.Username, "incorrectpassword")
+	_, err = uc.AuthenticateUser(userData.Username, "incorrectpassword")
 	if err == nil {
 		t.Error("Expected an error when authenticating a user with an incorrect password")
 	}
 
 	// Test case 3: Authenticating a non-existing user
-	_, err = um.AuthenticateUser("nonexistentuser", "password")
+	_, err = uc.AuthenticateUser("nonexistentuser", "password")
 	if err == nil {
 		t.Error("Expected an error when authenticating a non-existing user")
 	}
